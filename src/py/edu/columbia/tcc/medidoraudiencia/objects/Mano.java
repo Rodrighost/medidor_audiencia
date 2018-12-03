@@ -18,15 +18,15 @@ public class Mano {
     private boolean macheado;
     private Date fechaDesde;
     private Date fechaHasta;
-    private Direccion direccion;
+    private Gesto direccion;
 
-    public static enum Direccion {
-        IZQUIERDA, DERECHA, ARRIBA, ABAJO, NINGUNO
+    public static enum Gesto {
+        IZQUIERDA, DERECHA, ARRIBA, ABAJO, NINGUNO, AGARRAR, SOLTAR
     }
 
     public Mano() {
         this.macheado = false;
-        direccion = Direccion.NINGUNO;
+        direccion = Gesto.NINGUNO;
         centroMovX = -1;
     }
 
@@ -94,11 +94,11 @@ public class Mano {
         return (int) (fechaHasta.getTime() - fechaDesde.getTime());
     }
 
-    public Direccion getDireccion() {
+    public Gesto getDireccion() {
         return direccion;
     }
 
-    public void setDireccion(Direccion direccion) {
+    public void setDireccion(Gesto direccion) {
         this.direccion = direccion;
     }
 
@@ -108,7 +108,7 @@ public class Mano {
             centroMovY = centroY;
         }
 
-        direccion = Direccion.NINGUNO;
+        direccion = Gesto.NINGUNO;
 
         int distanciaX = centroMovX - centroX;
         int distanciaY = centroMovY - centroY;
@@ -116,18 +116,18 @@ public class Mano {
         if (Math.abs(distanciaX) > ancho * Cons.TOLERANCIA_MOVIMIENTO_HORIZONTAL) {
             centroMovX = centroX;
             if (distanciaX < 0) {
-                direccion = Direccion.IZQUIERDA;
+                direccion = Gesto.IZQUIERDA;
             } else {
-                direccion = Direccion.DERECHA;
+                direccion = Gesto.DERECHA;
             }
         }
 
         if (Math.abs(distanciaY) > alto * Cons.TOLERANCIA_MOVIMIENTO_VERTICAL) {
             centroMovY = centroY;
             if (distanciaY < 0) {
-                direccion = Direccion.ABAJO;
+                direccion = Gesto.ABAJO;
             } else {
-                direccion = Direccion.ARRIBA;
+                direccion = Gesto.ARRIBA;
             }
         }
 
@@ -137,7 +137,7 @@ public class Mano {
         boolean isMano = false;
         int distanciaX = Math.abs(mano.getCentroX() - centroX);
         int distanciaY = Math.abs(mano.getCentroY() - centroY);
-        if (distanciaX < ancho * Cons.TOLERANCIA_DESPLAZAMIENTO && distanciaY < alto * Cons.TOLERANCIA_DESPLAZAMIENTO) {
+        if (distanciaX < ancho * Cons.TOLERANCIA_DESPLAZAMIENTO_MANO && distanciaY < alto * Cons.TOLERANCIA_DESPLAZAMIENTO_MANO) {
             isMano = true;
         }
         return isMano;

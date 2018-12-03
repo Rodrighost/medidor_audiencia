@@ -51,7 +51,8 @@ public class MedidorAudiencia extends Thread {
     private double tamanoRectMax;
     private int minVecinos;
     private VideoCapture video;
-    private Mano.Direccion direccion;
+    private Mano.Gesto direccion;
+    private Date ultCambio;
 
     public MedidorAudiencia() {
         System.load(getClass().getResource(Cons.LIBRERIA_OPENCV).getPath());
@@ -69,8 +70,9 @@ public class MedidorAudiencia extends Thread {
         manosCandidatosAudiencia = new ArrayList();
 
         detectorRostros = new CascadeClassifier(getClass().getResource(Cons.HAARCASCADE_FRONTALFACE_ALT2).getPath());
-        detectorManos = new CascadeClassifier(getClass().getResource(Cons.HAARCASCADE_PUNHO).getPath());
+        detectorManos = new CascadeClassifier(getClass().getResource(Cons.HAARCASCADE_MANO).getPath());
         video = new VideoCapture(0);
+        ultCambio = new Date();
     }
 
     @Override
@@ -84,7 +86,7 @@ public class MedidorAudiencia extends Thread {
         MatOfRect matRostrosDetectados = new MatOfRect();
         MatOfRect matManosDetectados = new MatOfRect();
 
-        BackgroundSubtractorMOG2 fgbg = Video.createBackgroundSubtractorMOG2(200, 15, true);
+        BackgroundSubtractorMOG2 fgbg = Video.createBackgroundSubtractorMOG2(200, 10, false);
 
         while (!isInterrupted()) {
             if (video.grab()) {
@@ -95,23 +97,20 @@ public class MedidorAudiencia extends Thread {
 
                     video.retrieve(captura);
 
-                    Mat fgmask = new Mat();
-                    fgbg.apply(captura, fgmask);
-                    
-                    Mat kernel = new Mat(new Size(3, 3), CvType.CV_8UC1, new Scalar(255));
-                    Imgproc.morphologyEx(fgmask, fgmask, Imgproc.MORPH_OPEN, kernel);
-                    Imgproc.morphologyEx(fgmask, fgmask, Imgproc.MORPH_CLOSE, kernel);
-
                     Mat capturaGris = new Mat();
                     Imgproc.cvtColor(captura, capturaGris, Imgproc.COLOR_RGB2GRAY);
+                    Imgproc.equalizeHist(capturaGris, capturaGris);
+                    Imgproc.blur(capturaGris, capturaGris, new Size(7, 7));
+
+                    Mat fgmask = new Mat();
+                    fgbg.apply(capturaGris, fgmask);
 
                     detectorRostros.detectMultiScale(captura, matRostrosDetectados, factorEscala, minVecinos, Objdetect.CASCADE_SCALE_IMAGE, new Size(tamanoRectMin, tamanoRectMin), new Size(tamanoRectMax, tamanoRectMax));
-//                    detectorManos.detectMultiScale(capturaGris, matManosDetectados, factorEscala, minVecinos * 2, Objdetect.CASCADE_DO_ROUGH_SEARCH, new Size(tamanoRectMin / 2, tamanoRectMin / 2), new Size(tamanoRectMax / 2, tamanoRectMax / 2));
-                    detectorManos.detectMultiScale(fgmask, matManosDetectados, factorEscala, minVecinos, Objdetect.CASCADE_SCALE_IMAGE, new Size(tamanoRectMin, tamanoRectMin), new Size(tamanoRectMax, tamanoRectMax));
+                    detectorManos.detectMultiScale(fgmask, matManosDetectados, factorEscala, minVecinos * 2, Objdetect.CASCADE_DO_ROUGH_SEARCH, new Size(tamanoRectMin, tamanoRectMin), new Size(tamanoRectMax, tamanoRectMax));
 
                     procesarRostros(matRostrosDetectados, rostrosAudiencia, rostrosCandidatosAudiencia);
 
-                    Mat umbralizado = procesarManos(captura, matManosDetectados, manosAudiencia, manosCandidatosAudiencia);
+                    procesarManos(matManosDetectados, manosAudiencia, manosCandidatosAudiencia);
 
                     Mat img = captura.clone();
                     if (encuadrar) {
@@ -134,6 +133,8 @@ public class MedidorAudiencia extends Thread {
                             direccion = null;
                         }
 
+                        Date d = new Date();
+
                         if (direccion != null) {
                             switch (direccion) {
                                 case ARRIBA:
@@ -142,12 +143,17 @@ public class MedidorAudiencia extends Thread {
                                 case ABAJO:
                                     listener.onGestoAbajo();
                                     break;
-                                case IZQUIERDA:
-                                    listener.onGestoIzquierda();
-                                    break;
-                                case DERECHA:
-                                    listener.onGestoDerecha();
-                                    break;
+                            }
+                            if (d.getTime() - ultCambio.getTime() > Cons.TIEMPO_ENTRE_CAMBIOS) {
+                                switch (direccion) {
+                                    case IZQUIERDA:
+                                        listener.onGestoIzquierda();
+                                        break;
+                                    case DERECHA:
+                                        listener.onGestoDerecha();
+                                        break;
+                                }
+                                ultCambio = d;
                             }
                         }
                     }
@@ -158,6 +164,7 @@ public class MedidorAudiencia extends Thread {
                 }
             }
         }
+
         video.release();
     }
 
@@ -255,7 +262,7 @@ public class MedidorAudiencia extends Thread {
         }
     }
 
-    private Mat procesarManos(Mat captura, MatOfRect matManosDetectados, List<Mano> manosAudiencia, List<Mano> manosCandidatosAudiencia) {
+    private void procesarManos(MatOfRect matManosDetectados, List<Mano> manosAudiencia, List<Mano> manosCandidatosAudiencia) {
         List<Mano> manosDetectados = new ArrayList();
 
         for (Rect rect : matManosDetectados.toArray()) {
@@ -347,111 +354,6 @@ public class MedidorAudiencia extends Thread {
                 iter.remove();
             }
         }
-
-//        Mat capturaHSV = new Mat();
-//        captura = captura.clone();
-//        Imgproc.blur(captura, captura, new Size(7, 7));
-//
-//        Imgproc.cvtColor(captura, capturaHSV, Imgproc.COLOR_RGB2HSV);
-//
-//        Mat umbralizado = new Mat(capturaHSV.height(), capturaHSV.width(), CvType.CV_8UC3, new Scalar(0, 0, 0));
-//
-//        if (!manosAudiencia.isEmpty()) {
-//            Mano mano = manosAudiencia.get(0);
-//            int xDesde = mano.getCentroX() - mano.getAncho() / 3;
-//            int xHasta = mano.getCentroX() + mano.getAncho() / 3;
-//            int yDesde = mano.getCentroY() - mano.getAlto() / 3;
-//            int yHasta = mano.getCentroY() + mano.getAlto() / 3;
-//            int hMax = -1, hMin = -1, sMax = -1, sMin = -1, vMax = -1, vMin = -1, promH = 0, promS = 0, promV = 0, pixeles = 0;
-//            for (int x = xDesde; x < xHasta; x++) {
-//                for (int y = yDesde; y < yHasta; y++) {
-//                    double data[] = capturaHSV.get(y, x);
-//                    if (hMax == -1 || hMax < data[0]) {
-//                        hMax = (int) data[0];
-//                    }
-//                    if (hMin == -1 || hMin > data[0]) {
-//                        hMin = (int) data[0];
-//                    }
-//                    if (sMax == -1 || sMax < data[1]) {
-//                        sMax = (int) data[1];
-//                    }
-//                    if (sMin == -1 || sMin > data[1]) {
-//                        sMin = (int) data[1];
-//                    }
-//                    if (vMax == -1 || vMax < data[2]) {
-//                        vMax = (int) data[2];
-//                    }
-//                    if (vMin == -1 || vMin > data[2]) {
-//                        vMin = (int) data[2];
-//                    }
-//                    promH += (int) data[0];
-//                    promS += (int) data[1];
-//                    promV += (int) data[2];
-//                    pixeles++;
-//                }
-//            }
-//            promH = promH / pixeles;
-//            promS = promS / pixeles;
-//            promV = promV / pixeles;
-//
-//            double scaleY = mano.isMatcheado() ? 2 : 0.5;
-//            double scaleX = mano.isMatcheado() ? 2 : 0.9;
-//
-//            xDesde = mano.getCentroX() - (int) (mano.getAncho() / scaleX);
-//            xHasta = mano.getCentroX() + (int) (mano.getAncho() / scaleX);
-//            yDesde = mano.getCentroY() - (int) (mano.getAlto() / scaleY);
-//            yHasta = mano.getCentroY() + (int) (mano.getAlto() / 2);
-//
-//            if (xDesde < 0) {
-//                xDesde = 0;
-//            }
-//            if (xHasta > capturaHSV.width()) {
-//                xHasta = capturaHSV.width();
-//            }
-//            if (yDesde < 0) {
-//                yDesde = 0;
-//            }
-//            if (yHasta > capturaHSV.height()) {
-//                yHasta = capturaHSV.height();
-//            }
-//
-//            capturaHSV.submat(yDesde, yHasta, xDesde, xHasta).copyTo(umbralizado.submat(yDesde, yHasta, xDesde, xHasta));
-//
-////            if (mano.isMatcheado()) {
-////                Core.inRange(umbralizado, new Scalar(hMin, sMin, vMin), new Scalar(hMax, sMax, vMax), umbralizado);
-////            } else {
-////                Core.inRange(umbralizado, new Scalar(promH - 15, sMin,vMin), new Scalar(promH + 15, sMax, vMax), umbralizado);
-////                Core.inRange(umbralizado, new Scalar(promH - 20, promS - 20, promV - 20), new Scalar(promH + 20, promS + 20, promV + 20), umbralizado);
-//            Core.inRange(umbralizado, new Scalar(hMin, sMin, vMin), new Scalar(hMax, sMax, vMax), umbralizado);
-//            int kernelSize = (xHasta - xDesde) / 100 + 1;
-//            Mat kernel = new Mat(new Size(kernelSize, kernelSize), CvType.CV_8UC1, new Scalar(255));
-//            Imgproc.morphologyEx(umbralizado, umbralizado, Imgproc.MORPH_OPEN, kernel);
-////                Imgproc.morphologyEx(umbralizado, umbralizado, Imgproc.MORPH_CLOSE, kernel);
-////                Imgproc.dilate(umbralizado, umbralizado, kernel);
-////                Imgproc.dilate(umbralizado, umbralizado, kernel);
-////                Mat dilateElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(kernelSize *  4, kernelSize * 4));
-////                Mat erodeElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(kernelSize *  2, kernelSize * 2));
-////                Imgproc.erode(umbralizado, umbralizado, erodeElement);
-////                Imgproc.dilate(umbralizado, umbralizado, dilateElement);
-//
-//            List<MatOfPoint> contornos = new ArrayList();
-//            Mat hierarchy = new Mat();
-//
-//            Imgproc.findContours(umbralizado, contornos, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
-//
-////                Imgproc.cvtColor(umbralizado, umbralizado, Imgproc.COLOR_GRAY2RGB);
-//            umbralizado = new Mat(capturaHSV.height(), capturaHSV.width(), CvType.CV_8UC3, new Scalar(0, 0, 0));
-//
-//            if (hierarchy.size().height > 0 && hierarchy.size().width > 0) {
-//                for (int idx = 0; idx >= 0; idx = (int) hierarchy.get(0, idx)[0]) {
-//                    Imgproc.drawContours(umbralizado, contornos, idx, new Scalar(255, 255, 255), 2);
-//                }
-//            }
-//
-////            }
-//        }
-//        return umbralizado;
-        return captura;
     }
 
     private void encuadrarRostros(Mat img, List<Rostro> listaRostros) {
