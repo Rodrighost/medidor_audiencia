@@ -86,8 +86,8 @@ public class MedidorAudiencia extends Thread {
         MatOfRect matRostrosDetectados = new MatOfRect();
         MatOfRect matManosDetectados = new MatOfRect();
 
-        BackgroundSubtractorMOG2 fgbg = Video.createBackgroundSubtractorMOG2(200, 10, false);
-
+        BackgroundSubtractorMOG2 fgbg = Video.createBackgroundSubtractorMOG2(50, 10, false);
+        int i = 0;
         while (!isInterrupted()) {
             if (video.grab()) {
                 try {
@@ -99,11 +99,21 @@ public class MedidorAudiencia extends Thread {
 
                     Mat capturaGris = new Mat();
                     Imgproc.cvtColor(captura, capturaGris, Imgproc.COLOR_RGB2GRAY);
-                    Imgproc.equalizeHist(capturaGris, capturaGris);
-                    Imgproc.blur(capturaGris, capturaGris, new Size(7, 7));
+//                    Imgproc.equalizeHist(capturaGris, capturaGris);
+//                    Imgproc.blur(capturaGris, capturaGris, new Size(7, 7));
 
                     Mat fgmask = new Mat();
+                    i++;
+//                    if(i == 0){
+//                        fgbg.apply(capturaGris, fgmask, 1);
+//                    }else{
+//                        fgbg.apply(capturaGris, fgmask, -1);
+//                        i = 0;
+//                }
                     fgbg.apply(capturaGris, fgmask);
+
+                    Mat kernel = new Mat(new Size(3, 3), CvType.CV_8UC1, new Scalar(255));
+                    Imgproc.morphologyEx(fgmask, fgmask, Imgproc.MORPH_OPEN, kernel);
 
                     detectorRostros.detectMultiScale(captura, matRostrosDetectados, factorEscala, minVecinos, Objdetect.CASCADE_SCALE_IMAGE, new Size(tamanoRectMin, tamanoRectMin), new Size(tamanoRectMax, tamanoRectMax));
                     detectorManos.detectMultiScale(fgmask, matManosDetectados, factorEscala, minVecinos * 2, Objdetect.CASCADE_DO_ROUGH_SEARCH, new Size(tamanoRectMin, tamanoRectMin), new Size(tamanoRectMax, tamanoRectMax));
